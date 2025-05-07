@@ -47,7 +47,7 @@ export default function Home() {
     }
     if (filesToUpload.length > 0) {
       try {
-        const res = await fetch('http://localhost:5000/api/images/upload', {
+        const res = await fetch('http://localhost:3001/api/images/upload', {
           method: 'POST',
           body: formData,
         });
