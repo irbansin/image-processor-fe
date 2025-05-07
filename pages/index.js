@@ -19,6 +19,8 @@ export default function Home() {
     let newRejected = [];
     let newFeedback = [];
 
+    const formData = new FormData();
+    let filesToUpload = [];
     for (let file of files) {
       if (!ACCEPTED_TYPES.includes(file.type)) {
         newRejected.push({
@@ -32,7 +34,8 @@ export default function Home() {
         });
         continue;
       }
-
+      formData.append('images', file);
+      filesToUpload.push(file);
       // Show preview immediately
       const previewUrl = URL.createObjectURL(file);
       newAccepted.push({ file, previewUrl });
@@ -41,43 +44,53 @@ export default function Home() {
         status: 'Accepted',
         reason: 'Ready to upload',
       });
-
-      // Upload to backend
-      const formData = new FormData();
-      formData.append('image', file);
+    }
+    if (filesToUpload.length > 0) {
       try {
         const res = await fetch('http://localhost:5000/api/images/upload', {
           method: 'POST',
           body: formData,
         });
-        if (!res.ok) {
-          const data = await res.json();
-          newRejected.push({ file, reason: data.error || 'Upload failed' });
+        const data = await res.json();
+        if (res.status === 207 && data.results) {
+          data.results.forEach((result, idx) => {
+            const file = filesToUpload[idx];
+            if (result.status === 'Accepted') {
+              newFeedback.push({
+                name: result.filename,
+                status: 'Accepted',
+                reason: 'Uploaded successfully',
+              });
+            } else {
+              newRejected.push({ file, reason: result.reason || 'Upload failed' });
+              newFeedback.push({
+                name: result.filename,
+                status: 'Rejected',
+                reason: result.reason || 'Upload failed',
+              });
+            }
+          });
+        } else if (data.error) {
+          filesToUpload.forEach(file => {
+            newRejected.push({ file, reason: data.error });
+            newFeedback.push({
+              name: file.name,
+              status: 'Rejected',
+              reason: data.error,
+            });
+          });
+        }
+      } catch (err) {
+        filesToUpload.forEach(file => {
+          newRejected.push({ file, reason: 'Network or server error' });
           newFeedback.push({
             name: file.name,
             status: 'Rejected',
-            reason: data.error || 'Upload failed',
+            reason: 'Network or server error',
           });
-          continue;
-        }
-        const data = await res.json();
-        // Mark as uploaded successfully
-        newFeedback.push({
-          name: file.name,
-          status: 'Accepted',
-          reason: 'Uploaded successfully',
-        });
-        // Optionally store backend URL/data if needed
-      } catch (err) {
-        newRejected.push({ file, reason: 'Network or server error' });
-        newFeedback.push({
-          name: file.name,
-          status: 'Rejected',
-          reason: 'Network or server error',
         });
       }
     }
-
     setAccepted((prev) => [...prev, ...newAccepted]);
     setRejected((prev) => [...prev, ...newRejected]);
     setFeedback((prev) => [...prev, ...newFeedback]);
